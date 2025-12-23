@@ -19,6 +19,7 @@ module.exports = {
       testMatch: ['<rootDir>/src/**/*.node.test.ts?(x)'],
       moduleNameMapper: {
         voltra: '<rootDir>/src/server.ts',
+        '^(\\.{1,2}/.*)\\.js$': '$1',
       },
     },
   ],
