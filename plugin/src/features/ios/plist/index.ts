@@ -41,7 +41,6 @@ export const configureMainAppPlist: ConfigPlugin<ConfigureMainAppPlistProps> = (
           CFBundleURLSchemes: [scheme],
         },
       ]
-
       ;(content as any)['Voltra_AppGroupIdentifier'] = groupIdentifier
 
       writeFileSync(filePath, plist.build(content))

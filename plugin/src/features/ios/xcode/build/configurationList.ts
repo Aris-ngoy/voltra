@@ -81,4 +81,3 @@ export function addXCConfigurationList(xcodeProject: XcodeProject, options: AddC
 
   return xCConfigurationList
 }
-

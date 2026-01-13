@@ -7,7 +7,9 @@ import { validateWidgetConfig } from './validateWidget'
  */
 export function validateProps(props: ConfigPluginProps | undefined): void {
   if (!props) {
-    throw new Error('Voltra plugin requires configuration. Please provide at least groupIdentifier in your plugin config.')
+    throw new Error(
+      'Voltra plugin requires configuration. Please provide at least groupIdentifier in your plugin config.'
+    )
   }
 
   // Validate group identifier is provided

@@ -21,7 +21,9 @@ const withVoltra: VoltraConfigPlugin = (config, props) => {
 
   // After validation, props is guaranteed to be defined and have groupIdentifier
   if (!props) {
-    throw new Error('Voltra plugin requires configuration. Please provide at least groupIdentifier in your plugin config.')
+    throw new Error(
+      'Voltra plugin requires configuration. Please provide at least groupIdentifier in your plugin config.'
+    )
   }
 
   // Use deploymentTarget from props if provided, otherwise fall back to default

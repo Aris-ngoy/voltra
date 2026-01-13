@@ -2,23 +2,14 @@ import { randomBytes } from 'node:crypto'
 
 import React from 'react'
 
-import { renderLiveActivityToString, Voltra } from '../server.js'
+import { renderLiveActivityToString, Voltra } from '../../server.js'
 
-/**
- * Payload Budget Tests
- *
- * ActivityKit has a hard limit of 4KB for Live Activity payloads.
- * These tests ensure we throw a helpful error when the payload is too large.
- */
-
-// Generate truly random base64 using crypto - incompressible
 const generateRandomBase64 = (bytes: number): string => {
   return randomBytes(bytes).toString('base64')
 }
 
-describe('Payload budget validation', () => {
-  it('throws when payload contains oversized base64 image', async () => {
-    // 10KB of random bytes
+describe('Payload budget', () => {
+  test('Oversized base64 image', async () => {
     const oversizedBase64 = generateRandomBase64(10000)
 
     const variants = {
@@ -33,7 +24,7 @@ describe('Payload budget validation', () => {
     await expect(renderLiveActivityToString(variants)).rejects.toThrow(/exceeds safe budget/)
   })
 
-  it('accepts payloads within budget', async () => {
+  test('Payload within budget', async () => {
     const variants = {
       lockScreen: (
         <Voltra.VStack>

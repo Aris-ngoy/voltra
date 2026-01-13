@@ -67,4 +67,3 @@ export function configureBuild(xcodeProject: XcodeProject, options: ConfigureBui
 
   return xCConfigurationList
 }
-

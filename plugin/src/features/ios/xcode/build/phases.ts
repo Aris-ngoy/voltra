@@ -64,4 +64,3 @@ export function addBuildPhases(xcodeProject: XcodeProject, options: AddBuildPhas
     buildPath
   )
 }
-

@@ -11,9 +11,9 @@ export function addApplicationGroupsEntitlement(
   entitlements: Record<string, any>,
   groupIdentifier: string
 ): Record<string, any> {
-  const existingApplicationGroups = (
-    (entitlements['com.apple.security.application-groups'] as string[]) ?? []
-  ).filter(Boolean)
+  const existingApplicationGroups = ((entitlements['com.apple.security.application-groups'] as string[]) ?? []).filter(
+    Boolean
+  )
 
   entitlements['com.apple.security.application-groups'] = [groupIdentifier, ...existingApplicationGroups]
 

@@ -1,16 +1,16 @@
 import React, { ElementType, Suspense } from 'react'
 
-import { renderVoltraVariantToJson } from '../renderer/renderer.js'
-import { Voltra } from '../server.js'
+import { Voltra } from '../../server.js'
+import { renderVoltraVariantToJson } from '../renderer.js'
 
 describe('renderVoltraVariantToJson', () => {
-  it('should render a simple text component', () => {
+  test('Simple text component', () => {
     const element = <Voltra.Text>Hello, world!</Voltra.Text>
     const result = renderVoltraVariantToJson(element)
     expect(result).toEqual({ t: 0, c: 'Hello, world!' })
   })
 
-  it('should render nested components', () => {
+  test('Nested components', () => {
     const element = (
       <Voltra.VStack>
         <Voltra.Text>Element 1</Voltra.Text>
@@ -28,13 +28,13 @@ describe('renderVoltraVariantToJson', () => {
   })
 
   describe('Text', () => {
-    it('should render a simple text component', () => {
+    test('Simple text component', () => {
       const element = <Voltra.Text>Hello, world!</Voltra.Text>
       const result = renderVoltraVariantToJson(element)
       expect(result).toEqual({ t: 0, c: 'Hello, world!' })
     })
 
-    it('should not allow nested components', () => {
+    test('Does not allow nested components', () => {
       const element = (
         <Voltra.Text>
           <Voltra.Text>Hello, world!</Voltra.Text>
@@ -43,22 +43,22 @@ describe('renderVoltraVariantToJson', () => {
       expect(() => renderVoltraVariantToJson(element)).toThrow('Text component children must resolve to a string.')
     })
 
-    it('should stringify number children', () => {
+    test('Stringifies number children', () => {
       const element = <Voltra.Text>{42}</Voltra.Text>
       const result = renderVoltraVariantToJson(element)
       expect(result).toEqual({ t: 0, c: '42' })
     })
 
-    it('should stringify bigint children', () => {
+    test('Stringifies bigint children', () => {
       const element = <Voltra.Text>{123n}</Voltra.Text>
       const result = renderVoltraVariantToJson(element)
       expect(result).toEqual({ t: 0, c: '123' })
     })
   })
 
-  it('should throw error for component triggering suspense', () => {
+  test('Component triggering suspense', () => {
     const SuspenseComponent = () => {
-      throw new Promise(() => {}) // Simulate suspense
+      throw new Promise(() => {})
     }
 
     const element = <SuspenseComponent />
@@ -67,7 +67,7 @@ describe('renderVoltraVariantToJson', () => {
     )
   })
 
-  it('should throw error for async component returning promise', () => {
+  test('Async component returning promise', () => {
     const AsyncComponent = async () => {
       await new Promise((resolve) => setTimeout(resolve, 100))
       return 'Async result'
@@ -79,7 +79,7 @@ describe('renderVoltraVariantToJson', () => {
     )
   })
 
-  it('should throw error for class component', () => {
+  test('Class component', () => {
     class ClassComponent extends React.Component {
       render() {
         return 'Hello'
@@ -90,7 +90,7 @@ describe('renderVoltraVariantToJson', () => {
     expect(() => renderVoltraVariantToJson(element)).toThrow('Class components are not supported in Voltra.')
   })
 
-  it('should handle context providers correctly', () => {
+  test('Context providers', () => {
     const TestContext = React.createContext('default')
 
     const element = (
@@ -103,7 +103,7 @@ describe('renderVoltraVariantToJson', () => {
     expect(result).toEqual({ t: 0, c: 'provided' })
   })
 
-  it('should handle context consumers correctly', () => {
+  test('Context consumers', () => {
     const TestContext = React.createContext('default')
 
     const element = (
@@ -116,7 +116,7 @@ describe('renderVoltraVariantToJson', () => {
     expect(result).toEqual({ t: 0, c: 'Consumed: from provider' })
   })
 
-  it('should handle context consumers with default values', () => {
+  test('Context consumers with default values', () => {
     const TestContext = React.createContext('default value')
 
     const element = <TestContext.Consumer>{(value) => <Voltra.Text>{value}</Voltra.Text>}</TestContext.Consumer>
@@ -125,20 +125,19 @@ describe('renderVoltraVariantToJson', () => {
     expect(result).toEqual({ t: 0, c: 'default value' })
   })
 
-  it('should throw error for Suspense component', () => {
+  test('Suspense component', () => {
     const element = <Suspense>In suspense</Suspense>
     expect(() => renderVoltraVariantToJson(element)).toThrow('Suspense is not supported in Voltra.')
   })
 
-  it('should throw error for Portal component', () => {
-    // Portal is not exported from React, but still exists as a symbol
+  test('Portal component', () => {
     const Portal = Symbol.for('react.portal') as unknown as ElementType
     const element = <Portal>Portal content</Portal>
 
     expect(() => renderVoltraVariantToJson(element)).toThrow('Portal is not supported in Voltra.')
   })
 
-  it('should throw error for Profiler component', () => {
+  test('Profiler component', () => {
     const element = React.createElement(
       React.Profiler,
       {
@@ -151,7 +150,7 @@ describe('renderVoltraVariantToJson', () => {
     expect(() => renderVoltraVariantToJson(element)).toThrow('Profiler is not supported in Voltra.')
   })
 
-  it('should flatten nested fragments', () => {
+  test('Nested fragments', () => {
     const element = (
       <>
         <Voltra.Text>Element 1</Voltra.Text>
