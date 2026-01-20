@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Unified short name mappings for props, style properties, and modifiers
+/// Unified short name mappings for props and style properties
 /// Used to expand compressed payload keys back to their full names
 public enum ShortNames {
   /// Mapping from short names to full names
@@ -106,6 +106,7 @@ public enum ShortNames {
     "sho": "shadowOffset",
     "shop": "shadowOpacity",
     "shr": "shadowRadius",
+    "shrs": "showHours",
     "sz": "size",
     "smc": "smallCaps",
     "src": "source",
