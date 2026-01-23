@@ -1,4 +1,6 @@
-import type { ExpoConfig } from 'expo/config'
+import type { ExportedConfig } from '@expo/config-plugins'
+
+type ExpoConfig = ExportedConfig
 
 /**
  * Ensures the main app has a URL scheme set so widgetURL can open it.

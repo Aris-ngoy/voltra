@@ -54,6 +54,7 @@
   "license": "MIT",
   "homepage": "https://use-voltra.dev",
   "dependencies": {
+    "@expo/config-plugins": ">=7.0.0",
     "dedent": "^1.7.1",
     "react-is": "^19.2.0"
   },
