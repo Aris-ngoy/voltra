@@ -17,22 +17,20 @@
       "types": "./build/server.d.ts",
       "default": "./build/server.js"
     },
-    "./app.plugin.js": "./app.plugin.js",
-    "./expo-module.config.json": "./expo-module.config.json"
+    "./app.plugin.js": "./app.plugin.js"
   },
   "scripts": {
-    "build": "expo-module build",
-    "clean": "expo-module clean",
+    "build": "tsc",
+    "clean": "rm -rf build",
     "clean:plugin": "rm -rf plugin/build plugin/tsconfig.tsbuildinfo",
     "format:check": "prettier --check .",
     "format:swift:check": "swiftformat --lint ios",
     "format:swift:fix": "swiftformat ios",
-    "lint": "expo-module eslint",
-    "lint:libOnly": "expo-module eslint ./src",
-    "test": "expo-module test",
-    "prepare": "expo-module prepare && rm .eslintrc.js",
-    "prepublishOnly": "expo-module prepublishOnly",
-    "expo-module": "expo-module",
+    "lint": "eslint src",
+    "lint:libOnly": "eslint ./src",
+    "test": "jest",
+    "prepare": "tsc",
+    "prepublishOnly": "tsc",
     "open:ios": "xed example/ios",
     "generate": "ts-node generator/generate-types.ts",
     "harness:ios": "npm run harness:ios --prefix example",
@@ -40,10 +38,10 @@
   },
   "keywords": [
     "react-native",
-    "expo",
     "live-activity",
     "ios",
-    "apple"
+    "apple",
+    "turbo-module"
   ],
   "author": "Saúl Sharma (https://x.com/saul_sharma), Szymon Chmal (https://x.com/chmalszymon)",
   "repository": {
@@ -66,20 +64,29 @@
     "@types/react-is": "^19.2.0",
     "ajv": "^8.12.0",
     "eslint": "^9.33.0",
-    "eslint-config-expo": "^9.2.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-import-resolver-alias": "^1.1.2",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-simple-import-sort": "^12.1.1",
-    "expo": "~53.0.0",
-    "expo-module-scripts": "^4.1.10",
+    "jest": "^29.7.0",
+    "@jest/globals": "^29.7.0",
     "prettier": "2.8.8",
     "react-native": "0.79.1",
-    "ts-node": "^10.9.0"
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
   },
   "peerDependencies": {
-    "expo": "*",
     "react": "*",
-    "react-native": "*"
+    "react-native": ">=0.73.0"
+  },
+  "codegenConfig": {
+    "name": "VoltraSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "ios": {
+      "modulesConformingToProtocol": {
+        "RCTEventEmitter": ["VoltraModule"]
+      }
+    }
   }
 }

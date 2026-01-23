@@ -1,22 +1,42 @@
-import ExpoModulesCore
+import React
 import SwiftUI
 import UIKit
 
-class VoltraRN: ExpoView {
+@objc(VoltraViewManager)
+class VoltraViewManager: RCTViewManager {
+  override func view() -> UIView! {
+    return VoltraRNView()
+  }
+
+  override var methodQueue: DispatchQueue! {
+    return DispatchQueue.main
+  }
+
+  @objc
+  override static func requiresMainQueueSetup() -> Bool {
+    return true
+  }
+}
+
+class VoltraRNView: UIView {
   private var hostingController: UIHostingController<AnyView>?
   private var root: VoltraNode = .empty
+  private var _viewId: String = UUID().uuidString
 
-  /// Unique identifier for this view instance, used as 'source' in interaction events
-  private var viewId: String = UUID().uuidString
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    clipsToBounds = true
+    setupHostingController()
+  }
 
-  required init(appContext: AppContext? = nil) {
-    super.init(appContext: appContext)
+  required init?(coder: NSCoder) {
+    super.init(coder: coder)
     clipsToBounds = true
     setupHostingController()
   }
 
   private func setupHostingController() {
-    let view = Voltra(root: .empty, activityId: viewId)
+    let view = Voltra(root: .empty, activityId: _viewId)
     let hostingController = UIHostingController(rootView: AnyView(view))
     hostingController.view.backgroundColor = .clear
     addSubview(hostingController.view)
@@ -28,14 +48,18 @@ class VoltraRN: ExpoView {
     hostingController?.view.frame = bounds
   }
 
-  func setViewId(_ id: String) {
-    guard !id.isEmpty else { return }
-    viewId = id
-    updateView()
+  @objc var viewId: String = "" {
+    didSet {
+      guard !viewId.isEmpty else { return }
+      _viewId = viewId
+      updateView()
+    }
   }
 
-  func setPayload(_ jsonString: String) {
-    parseAndUpdatePayload(jsonString)
+  @objc var payload: String = "" {
+    didSet {
+      parseAndUpdatePayload(payload)
+    }
   }
 
   private func parseAndUpdatePayload(_ jsonString: String) {
@@ -53,8 +77,7 @@ class VoltraRN: ExpoView {
   private func updateView() {
     hostingController?.view.removeFromSuperview()
 
-    // This is not the most performant way to update the view, but it's the easiest way to get the job done.
-    let newView = Voltra(root: root, activityId: viewId)
+    let newView = Voltra(root: root, activityId: _viewId)
     let newHostingController = UIHostingController(rootView: AnyView(newView))
     newHostingController.view.backgroundColor = .clear
     newHostingController.view.frame = bounds

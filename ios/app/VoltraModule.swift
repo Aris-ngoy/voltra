@@ -1,16 +1,18 @@
 import ActivityKit
 import Compression
-import ExpoModulesCore
 import Foundation
+import React
 import WidgetKit
 
-public class VoltraModule: Module {
+@objc(VoltraModule)
+public class VoltraModule: RCTEventEmitter {
   private let MAX_PAYLOAD_SIZE_IN_BYTES = 4096
   private let WIDGET_JSON_WARNING_SIZE = 50000 // 50KB per widget
   private let TIMELINE_WARNING_SIZE = 100_000 // 100KB per timeline
   private let liveActivityService = VoltraLiveActivityService()
   private var wasLaunchedInBackground: Bool = false
   private var monitoredActivityIds: Set<String> = []
+  private var hasListeners = false
 
   enum VoltraErrors: Error {
     case unsupportedOS
@@ -19,9 +21,56 @@ public class VoltraModule: Module {
     case unexpectedError(Error)
   }
 
+  // MARK: - Initialization
+
+  public override init() {
+    super.init()
+    // Track if app was launched in background (headless)
+    DispatchQueue.main.async { [weak self] in
+      self?.wasLaunchedInBackground = UIApplication.shared.applicationState == .background
+    }
+    // Clean up data for widgets that are no longer installed
+    cleanupOrphanedWidgetData()
+  }
+
+  // MARK: - RCTEventEmitter
+
+  @objc
+  public override static func requiresMainQueueSetup() -> Bool {
+    return true
+  }
+
+  @objc
+  public override func supportedEvents() -> [String] {
+    return ["interaction", "activityTokenReceived", "activityPushToStartTokenReceived", "stateChange"]
+  }
+
+  @objc
+  public override func startObserving() {
+    hasListeners = true
+    VoltraEventBus.shared.subscribe { [weak self] eventType, eventData in
+      self?.sendEvent(withName: eventType, body: eventData)
+    }
+
+    if pushNotificationsEnabled {
+      observePushToStartToken()
+    }
+
+    observeLiveActivityUpdates()
+  }
+
+  @objc
+  public override func stopObserving() {
+    hasListeners = false
+    VoltraEventBus.shared.unsubscribe()
+    monitoredActivityIds.removeAll()
+  }
+
+  // MARK: - Validation
+
   private func validatePayloadSize(_ compressedPayload: String, operation: String) throws {
     let dataSize = compressedPayload.utf8.count
-    let safeBudget = 3345 // Keep existing safe budget
+    let safeBudget = 3345
     print("Compressed payload size: \(dataSize)B (safe budget \(safeBudget)B, hard cap \(MAX_PAYLOAD_SIZE_IN_BYTES)B)")
 
     if dataSize > safeBudget {
@@ -35,209 +84,250 @@ public class VoltraModule: Module {
     }
   }
 
-  public func definition() -> ModuleDefinition {
-    Name("VoltraModule")
+  // MARK: - Live Activity Methods
 
-    // UI component events forwarded from the extension + push/state events
-    Events("interaction", "activityTokenReceived", "activityPushToStartTokenReceived", "stateChange")
-
-    OnStartObserving {
-      VoltraEventBus.shared.subscribe { [weak self] eventType, eventData in
-        self?.sendEvent(eventType, eventData)
-      }
-
-      if pushNotificationsEnabled {
-        observePushToStartToken()
-      }
-
-      observeLiveActivityUpdates()
+  @objc(startLiveActivity:options:resolve:reject:)
+  func startLiveActivity(
+    _ jsonString: String,
+    options: NSDictionary?,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard #available(iOS 16.2, *) else {
+      reject("UNSUPPORTED_OS", "Live Activities require iOS 16.2 or later", nil)
+      return
+    }
+    guard VoltraLiveActivityService.areActivitiesEnabled() else {
+      reject("LIVE_ACTIVITIES_NOT_ENABLED", "Live Activities are not enabled", nil)
+      return
     }
 
-    OnStopObserving {
-      VoltraEventBus.shared.unsubscribe()
-      monitoredActivityIds.removeAll()
-    }
-
-    OnCreate {
-      // Track if app was launched in background (headless)
-      wasLaunchedInBackground = UIApplication.shared.applicationState == .background
-
-      // Clean up data for widgets that are no longer installed
-      cleanupOrphanedWidgetData()
-    }
-
-    AsyncFunction("startLiveActivity") { (jsonString: String, options: StartVoltraOptions?) async throws -> String in
-      guard #available(iOS 16.2, *) else { throw VoltraErrors.unsupportedOS }
-      guard VoltraLiveActivityService.areActivitiesEnabled() else {
-        throw VoltraErrors.liveActivitiesNotEnabled
-      }
-
+    Task {
       do {
-        // Compress JSON using brotli level 2
         let compressedJson = try BrotliCompression.compress(jsonString: jsonString)
         try validatePayloadSize(compressedJson, operation: "start")
 
-        let activityName = options?.activityName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let activityName = (options?["activityId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let deepLinkUrl = options?["deepLinkUrl"] as? String
 
-        // Extract staleDate and relevanceScore from options
         let staleDate: Date? = {
-          if let staleDateMs = options?.staleDate {
+          if let staleDateMs = options?["staleDate"] as? Double {
             return Date(timeIntervalSince1970: staleDateMs / 1000.0)
           }
           return nil
         }()
-        let relevanceScore: Double = options?.relevanceScore ?? 0.0
+        let relevanceScore: Double = options?["relevanceScore"] as? Double ?? 0.0
 
-        // Create request struct with compressed JSON
         let createRequest = CreateActivityRequest(
           activityId: activityName,
-          deepLinkUrl: options?.deepLinkUrl,
+          deepLinkUrl: deepLinkUrl,
           jsonString: compressedJson,
           staleDate: staleDate,
           relevanceScore: relevanceScore,
-          pushType: pushNotificationsEnabled ? .token : nil,
+          pushType: self.pushNotificationsEnabled ? .token : nil,
           endExistingWithSameName: true
         )
 
-        // Create activity using service
-        let finalActivityId = try await liveActivityService.createActivity(createRequest)
-
-        return finalActivityId
+        let finalActivityId = try await self.liveActivityService.createActivity(createRequest)
+        resolve(finalActivityId)
       } catch {
         print("Error starting Voltra instance: \(error)")
-        // Map service errors to module errors
-        if let serviceError = error as? VoltraLiveActivityError {
-          switch serviceError {
-          case .unsupportedOS:
-            throw VoltraErrors.unsupportedOS
-          case .liveActivitiesNotEnabled:
-            throw VoltraErrors.liveActivitiesNotEnabled
-          case .notFound:
-            throw VoltraErrors.notFound
-          }
-        }
-        throw VoltraErrors.unexpectedError(error)
+        reject("START_FAILED", error.localizedDescription, error)
       }
     }
+  }
 
-    AsyncFunction("updateLiveActivity") { (activityId: String, jsonString: String, options: UpdateVoltraOptions?) async throws in
-      guard #available(iOS 16.2, *) else { throw VoltraErrors.unsupportedOS }
+  @objc(updateLiveActivity:jsonString:options:resolve:reject:)
+  func updateLiveActivity(
+    _ activityId: String,
+    jsonString: String,
+    options: NSDictionary?,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard #available(iOS 16.2, *) else {
+      reject("UNSUPPORTED_OS", "Live Activities require iOS 16.2 or later", nil)
+      return
+    }
 
-      // Compress JSON using brotli level 2
-      let compressedJson = try BrotliCompression.compress(jsonString: jsonString)
-      try validatePayloadSize(compressedJson, operation: "update")
-
-      // Extract staleDate and relevanceScore from options
-      let staleDate: Date? = {
-        if let staleDateMs = options?.staleDate {
-          return Date(timeIntervalSince1970: staleDateMs / 1000.0)
-        }
-        return nil
-      }()
-      let relevanceScore: Double = options?.relevanceScore ?? 0.0
-
-      // Create update request struct with compressed JSON
-      let updateRequest = UpdateActivityRequest(
-        jsonString: compressedJson,
-        staleDate: staleDate,
-        relevanceScore: relevanceScore
-      )
-
+    Task {
       do {
-        try await liveActivityService.updateActivity(byName: activityId, request: updateRequest)
+        let compressedJson = try BrotliCompression.compress(jsonString: jsonString)
+        try validatePayloadSize(compressedJson, operation: "update")
+
+        let staleDate: Date? = {
+          if let staleDateMs = options?["staleDate"] as? Double {
+            return Date(timeIntervalSince1970: staleDateMs / 1000.0)
+          }
+          return nil
+        }()
+        let relevanceScore: Double = options?["relevanceScore"] as? Double ?? 0.0
+
+        let updateRequest = UpdateActivityRequest(
+          jsonString: compressedJson,
+          staleDate: staleDate,
+          relevanceScore: relevanceScore
+        )
+
+        try await self.liveActivityService.updateActivity(byName: activityId, request: updateRequest)
+        resolve(nil)
       } catch {
         if let serviceError = error as? VoltraLiveActivityError {
           switch serviceError {
           case .unsupportedOS:
-            throw VoltraErrors.unsupportedOS
+            reject("UNSUPPORTED_OS", "Live Activities require iOS 16.2 or later", nil)
           case .notFound:
-            throw VoltraErrors.notFound
+            reject("NOT_FOUND", "Activity not found", nil)
           case .liveActivitiesNotEnabled:
-            throw VoltraErrors.liveActivitiesNotEnabled
+            reject("LIVE_ACTIVITIES_NOT_ENABLED", "Live Activities are not enabled", nil)
           }
+        } else {
+          reject("UPDATE_FAILED", error.localizedDescription, error)
         }
-        throw VoltraErrors.unexpectedError(error)
       }
     }
+  }
 
-    AsyncFunction("endLiveActivity") { (activityId: String, options: EndVoltraOptions?) async throws in
-      guard #available(iOS 16.2, *) else { throw VoltraErrors.unsupportedOS }
+  @objc(endLiveActivity:options:resolve:reject:)
+  func endLiveActivity(
+    _ activityId: String,
+    options: NSDictionary?,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard #available(iOS 16.2, *) else {
+      reject("UNSUPPORTED_OS", "Live Activities require iOS 16.2 or later", nil)
+      return
+    }
 
-      // Convert dismissal policy options to ActivityKit type
-      let dismissalPolicy = convertToActivityKitDismissalPolicy(options?.dismissalPolicy)
-
+    Task {
       do {
-        try await liveActivityService.endActivity(byName: activityId, dismissalPolicy: dismissalPolicy)
+        let dismissalPolicy = self.convertToActivityKitDismissalPolicy(options?["dismissalPolicy"] as? NSDictionary)
+        try await self.liveActivityService.endActivity(byName: activityId, dismissalPolicy: dismissalPolicy)
+        resolve(nil)
       } catch {
         if let serviceError = error as? VoltraLiveActivityError {
           switch serviceError {
           case .unsupportedOS:
-            throw VoltraErrors.unsupportedOS
+            reject("UNSUPPORTED_OS", "Live Activities require iOS 16.2 or later", nil)
           case .notFound:
-            throw VoltraErrors.notFound
+            reject("NOT_FOUND", "Activity not found", nil)
           case .liveActivitiesNotEnabled:
-            throw VoltraErrors.liveActivitiesNotEnabled
+            reject("LIVE_ACTIVITIES_NOT_ENABLED", "Live Activities are not enabled", nil)
           }
+        } else {
+          reject("END_FAILED", error.localizedDescription, error)
         }
-        throw VoltraErrors.unexpectedError(error)
       }
     }
+  }
 
-    // Preferred name mirroring iOS terminology
-    AsyncFunction("endAllLiveActivities") { () async throws in
-      guard #available(iOS 16.2, *) else { throw VoltraErrors.unsupportedOS }
-      await liveActivityService.endAllActivities()
+  @objc(endAllLiveActivities:reject:)
+  func endAllLiveActivities(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard #available(iOS 16.2, *) else {
+      reject("UNSUPPORTED_OS", "Live Activities require iOS 16.2 or later", nil)
+      return
     }
 
-    // Return the latest (most recently created) Voltra Live Activity ID, if any.
-    // Useful to rebind after Fast Refresh in development.
-    AsyncFunction("getLatestVoltraActivityId") { () -> String? in
-      guard #available(iOS 16.2, *) else { return nil }
-      return liveActivityService.getLatestActivity()?.id
+    Task {
+      await self.liveActivityService.endAllActivities()
+      resolve(nil)
     }
+  }
 
-    // Debug helper: list all running Voltra Live Activity IDs
-    AsyncFunction("listVoltraActivityIds") { () -> [String] in
-      guard #available(iOS 16.2, *) else { return [] }
-      return liveActivityService.getAllActivities().map(\.id)
+  @objc(getLatestVoltraActivityId:reject:)
+  func getLatestVoltraActivityId(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard #available(iOS 16.2, *) else {
+      resolve(nil)
+      return
     }
+    resolve(liveActivityService.getLatestActivity()?.id)
+  }
 
-    Function("isLiveActivityActive") { (activityName: String) -> Bool in
-      guard #available(iOS 16.2, *) else { return false }
-      return liveActivityService.isActivityActive(name: activityName)
+  @objc(listVoltraActivityIds:reject:)
+  func listVoltraActivityIds(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard #available(iOS 16.2, *) else {
+      resolve([])
+      return
     }
+    resolve(liveActivityService.getAllActivities().map(\.id))
+  }
 
-    Function("isHeadless") { () -> Bool in
-      return wasLaunchedInBackground
-    }
+  @objc(isLiveActivityActive:)
+  func isLiveActivityActive(_ activityName: String) -> NSNumber {
+    guard #available(iOS 16.2, *) else { return false }
+    return NSNumber(value: liveActivityService.isActivityActive(name: activityName))
+  }
 
-    // Preload images to App Group storage for use in Live Activities
-    AsyncFunction("preloadImages") { (images: [PreloadImageOptions]) async throws -> PreloadImagesResult in
+  @objc(isHeadless)
+  func isHeadless() -> NSNumber {
+    return NSNumber(value: wasLaunchedInBackground)
+  }
+
+  // MARK: - Image Preloading Methods
+
+  @objc(preloadImages:resolve:reject:)
+  func preloadImages(
+    _ images: NSArray,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    Task {
       var succeeded: [String] = []
-      var failed: [PreloadImageFailure] = []
+      var failed: [[String: String]] = []
 
-      for imageOptions in images {
+      for case let imageDict as NSDictionary in images {
+        guard let url = imageDict["url"] as? String,
+              let key = imageDict["key"] as? String else {
+          continue
+        }
+
+        let method = imageDict["method"] as? String
+        let headers = imageDict["headers"] as? [String: String]
+
         do {
-          try await self.downloadAndSaveImage(imageOptions)
-          succeeded.append(imageOptions.key)
+          try await self.downloadAndSaveImage(
+            url: url,
+            key: key,
+            method: method,
+            headers: headers
+          )
+          succeeded.append(key)
         } catch {
-          failed.append(PreloadImageFailure(key: imageOptions.key, error: error.localizedDescription))
+          failed.append(["key": key, "error": error.localizedDescription])
         }
       }
 
-      return PreloadImagesResult(succeeded: succeeded, failed: failed)
+      resolve(["succeeded": succeeded, "failed": failed])
+    }
+  }
+
+  @objc(reloadLiveActivities:resolve:reject:)
+  func reloadLiveActivities(
+    _ activityNames: NSArray?,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard #available(iOS 16.2, *) else {
+      reject("UNSUPPORTED_OS", "Live Activities require iOS 16.2 or later", nil)
+      return
     }
 
-    // Reload Live Activities to pick up preloaded images
-    // This triggers an update with the same content state, forcing SwiftUI to re-render
-    AsyncFunction("reloadLiveActivities") { (activityNames: [String]?) async throws in
-      guard #available(iOS 16.2, *) else { throw VoltraErrors.unsupportedOS }
-
+    Task {
       let activities = self.liveActivityService.getAllActivities()
+      let namesArray = activityNames as? [String]
 
       for activity in activities {
-        // If activityNames is provided, only reload those specific activities
-        if let names = activityNames, !names.isEmpty {
+        if let names = namesArray, !names.isEmpty {
           guard names.contains(activity.attributes.name) else { continue }
         }
 
@@ -258,94 +348,119 @@ public class VoltraModule: Module {
           print("[Voltra] Failed to reload Live Activity '\(activity.attributes.name)': \(error)")
         }
       }
+      resolve(nil)
     }
+  }
 
-    // Clear preloaded images from App Group storage
-    AsyncFunction("clearPreloadedImages") { (keys: [String]?) async in
-      if let keys = keys, !keys.isEmpty {
-        // Clear specific images
-        VoltraImageStore.removeImages(keys: keys)
-        print("[Voltra] Cleared preloaded images: \(keys.joined(separator: ", "))")
+  @objc(clearPreloadedImages:resolve:reject:)
+  func clearPreloadedImages(
+    _ keys: NSArray?,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    Task {
+      if let keysArray = keys as? [String], !keysArray.isEmpty {
+        VoltraImageStore.removeImages(keys: keysArray)
+        print("[Voltra] Cleared preloaded images: \(keysArray.joined(separator: ", "))")
       } else {
-        // Clear all preloaded images
         VoltraImageStore.clearAll()
         print("[Voltra] Cleared all preloaded images")
       }
-    }
-
-    // MARK: - Home Screen Widget Functions
-
-    // Update a home screen widget with new content
-    AsyncFunction("updateWidget") { (widgetId: String, jsonString: String, options: UpdateWidgetOptions?) async throws in
-      try self.writeWidgetData(widgetId: widgetId, jsonString: jsonString, deepLinkUrl: options?.deepLinkUrl)
-
-      // Clear any scheduled timeline so single-entry data takes effect
-      self.clearWidgetTimeline(widgetId: widgetId)
-
-      // Reload the widget timeline
-      WidgetCenter.shared.reloadTimelines(ofKind: "Voltra_Widget_\(widgetId)")
-      print("[Voltra] Updated widget '\(widgetId)'")
-    }
-
-    // Schedule a widget timeline with multiple entries
-    AsyncFunction("scheduleWidget") { (widgetId: String, timelineJson: String) async throws in
-      try self.writeWidgetTimeline(widgetId: widgetId, timelineJson: timelineJson)
-
-      // Reload the widget timeline to pick up scheduled entries
-      WidgetCenter.shared.reloadTimelines(ofKind: "Voltra_Widget_\(widgetId)")
-    }
-
-    // Reload widget timelines to refresh their content
-    AsyncFunction("reloadWidgets") { (widgetIds: [String]?) async in
-      if let ids = widgetIds, !ids.isEmpty {
-        for widgetId in ids {
-          WidgetCenter.shared.reloadTimelines(ofKind: "Voltra_Widget_\(widgetId)")
-        }
-        print("[Voltra] Reloaded widgets: \(ids.joined(separator: ", "))")
-      } else {
-        WidgetCenter.shared.reloadAllTimelines()
-        print("[Voltra] Reloaded all widgets")
-      }
-    }
-
-    // Clear a widget's stored data
-    AsyncFunction("clearWidget") { (widgetId: String) async in
-      self.clearWidgetData(widgetId: widgetId)
-      WidgetCenter.shared.reloadTimelines(ofKind: "Voltra_Widget_\(widgetId)")
-      print("[Voltra] Cleared widget '\(widgetId)'")
-    }
-
-    // Clear all widgets' stored data
-    AsyncFunction("clearAllWidgets") { () async in
-      self.clearAllWidgetData()
-      WidgetCenter.shared.reloadAllTimelines()
-      print("[Voltra] Cleared all widgets")
-    }
-
-    View(VoltraRN.self) {
-      Prop("payload") { (view, payload: String) in
-        view.setPayload(payload)
-      }
-
-      Prop("viewId") { (view, viewId: String) in
-        view.setViewId(viewId)
-      }
+      resolve(nil)
     }
   }
-}
 
-// Convert dismissal policy options to ActivityKit type
-private extension VoltraModule {
-  func convertToActivityKitDismissalPolicy(_ options: DismissalPolicyOptions?) -> ActivityUIDismissalPolicy {
+  // MARK: - Widget Methods
+
+  @objc(updateWidget:jsonString:options:resolve:reject:)
+  func updateWidget(
+    _ widgetId: String,
+    jsonString: String,
+    options: NSDictionary?,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    do {
+      let deepLinkUrl = options?["deepLinkUrl"] as? String
+      try writeWidgetData(widgetId: widgetId, jsonString: jsonString, deepLinkUrl: deepLinkUrl)
+      clearWidgetTimeline(widgetId: widgetId)
+      WidgetCenter.shared.reloadTimelines(ofKind: "Voltra_Widget_\(widgetId)")
+      print("[Voltra] Updated widget '\(widgetId)'")
+      resolve(nil)
+    } catch {
+      reject("WIDGET_UPDATE_FAILED", error.localizedDescription, error)
+    }
+  }
+
+  @objc(scheduleWidget:timelineJson:resolve:reject:)
+  func scheduleWidget(
+    _ widgetId: String,
+    timelineJson: String,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    do {
+      try writeWidgetTimeline(widgetId: widgetId, timelineJson: timelineJson)
+      WidgetCenter.shared.reloadTimelines(ofKind: "Voltra_Widget_\(widgetId)")
+      resolve(nil)
+    } catch {
+      reject("WIDGET_SCHEDULE_FAILED", error.localizedDescription, error)
+    }
+  }
+
+  @objc(reloadWidgets:resolve:reject:)
+  func reloadWidgets(
+    _ widgetIds: NSArray?,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    if let idsArray = widgetIds as? [String], !idsArray.isEmpty {
+      for widgetId in idsArray {
+        WidgetCenter.shared.reloadTimelines(ofKind: "Voltra_Widget_\(widgetId)")
+      }
+      print("[Voltra] Reloaded widgets: \(idsArray.joined(separator: ", "))")
+    } else {
+      WidgetCenter.shared.reloadAllTimelines()
+      print("[Voltra] Reloaded all widgets")
+    }
+    resolve(nil)
+  }
+
+  @objc(clearWidget:resolve:reject:)
+  func clearWidget(
+    _ widgetId: String,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    clearWidgetData(widgetId: widgetId)
+    WidgetCenter.shared.reloadTimelines(ofKind: "Voltra_Widget_\(widgetId)")
+    print("[Voltra] Cleared widget '\(widgetId)'")
+    resolve(nil)
+  }
+
+  @objc(clearAllWidgets:reject:)
+  func clearAllWidgets(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    clearAllWidgetData()
+    WidgetCenter.shared.reloadAllTimelines()
+    print("[Voltra] Cleared all widgets")
+    resolve(nil)
+  }
+
+  // MARK: - Helper Methods
+
+  private func convertToActivityKitDismissalPolicy(_ options: NSDictionary?) -> ActivityUIDismissalPolicy {
     guard let options = options else {
       return .immediate
     }
 
-    switch options.type {
+    switch options["type"] as? String {
     case "immediate":
       return .immediate
     case "after":
-      if let timestamp = options.date {
+      if let timestamp = options["date"] as? Double {
         let date = Date(timeIntervalSince1970: timestamp / 1000.0)
         return .after(date)
       }
@@ -359,23 +474,20 @@ private extension VoltraModule {
 // MARK: - Image Preloading
 
 private extension VoltraModule {
-  /// Download and save an image to App Group storage
-  func downloadAndSaveImage(_ options: PreloadImageOptions) async throws {
-    guard let url = URL(string: options.url) else {
-      throw PreloadError.invalidURL(options.url)
+  func downloadAndSaveImage(url urlString: String, key: String, method: String?, headers: [String: String]?) async throws {
+    guard let url = URL(string: urlString) else {
+      throw PreloadError.invalidURL(urlString)
     }
 
-    // Create request with optional method and headers
     var request = URLRequest(url: url)
-    request.httpMethod = options.method ?? "GET"
+    request.httpMethod = method ?? "GET"
 
-    if let headers = options.headers {
-      for (key, value) in headers {
-        request.setValue(value, forHTTPHeaderField: key)
+    if let headers = headers {
+      for (headerKey, value) in headers {
+        request.setValue(value, forHTTPHeaderField: headerKey)
       }
     }
 
-    // Perform the request
     let (data, response) = try await URLSession.shared.data(for: request)
 
     guard let httpResponse = response as? HTTPURLResponse else {
@@ -386,29 +498,24 @@ private extension VoltraModule {
       throw PreloadError.httpError(statusCode: httpResponse.statusCode)
     }
 
-    // Check Content-Length header first if available
     if let contentLengthString = httpResponse.value(forHTTPHeaderField: "Content-Length"),
        let contentLength = Int(contentLengthString)
     {
       if contentLength >= MAX_PAYLOAD_SIZE_IN_BYTES {
-        throw PreloadError.imageTooLarge(key: options.key, size: contentLength)
+        throw PreloadError.imageTooLarge(key: key, size: contentLength)
       }
     }
 
-    // Also validate actual data size (in case Content-Length was missing or inaccurate)
     if data.count >= MAX_PAYLOAD_SIZE_IN_BYTES {
-      throw PreloadError.imageTooLarge(key: options.key, size: data.count)
+      throw PreloadError.imageTooLarge(key: key, size: data.count)
     }
 
-    // Validate that the data is actually an image
     guard UIImage(data: data) != nil else {
-      throw PreloadError.invalidImageData(key: options.key)
+      throw PreloadError.invalidImageData(key: key)
     }
 
-    // Save to App Group storage
-    try VoltraImageStore.saveImage(data, key: options.key)
-
-    print("[Voltra] Preloaded image '\(options.key)' (\(data.count) bytes)")
+    try VoltraImageStore.saveImage(data, key: key)
+    print("[Voltra] Preloaded image '\(key)' (\(data.count) bytes)")
   }
 }
 
@@ -450,16 +557,13 @@ private extension VoltraModule {
       throw WidgetError.userDefaultsUnavailable
     }
 
-    // Check payload size and log warning if too large
     let dataSize = jsonString.utf8.count
     if dataSize > WIDGET_JSON_WARNING_SIZE {
       print("[Voltra] ⚠️ Large widget payload for '\(widgetId)': \(dataSize) bytes (warning threshold: \(WIDGET_JSON_WARNING_SIZE) bytes)")
     }
 
-    // Store the JSON payload
     defaults.set(jsonString, forKey: "Voltra_Widget_JSON_\(widgetId)")
 
-    // Store or remove deep link URL
     if let url = deepLinkUrl, !url.isEmpty {
       defaults.set(url, forKey: "Voltra_Widget_DeepLinkURL_\(widgetId)")
     } else {
@@ -477,13 +581,11 @@ private extension VoltraModule {
       throw WidgetError.userDefaultsUnavailable
     }
 
-    // Check timeline size and log warning if too large
     let dataSize = timelineJson.utf8.count
     if dataSize > TIMELINE_WARNING_SIZE {
       print("[Voltra] ⚠️ Large timeline for '\(widgetId)': \(dataSize) bytes (warning threshold: \(TIMELINE_WARNING_SIZE) bytes)")
     }
 
-    // Store the timeline JSON
     defaults.set(timelineJson, forKey: "Voltra_Widget_Timeline_\(widgetId)")
     defaults.synchronize()
     print("[Voltra] writeWidgetTimeline: Timeline stored successfully")
@@ -503,7 +605,6 @@ private extension VoltraModule {
     guard let groupId = VoltraConfig.groupIdentifier(),
           let defaults = UserDefaults(suiteName: groupId) else { return }
 
-    // Get all widget IDs from Info.plist
     let widgetIds = Bundle.main.object(forInfoDictionaryKey: "Voltra_WidgetIds") as? [String] ?? []
 
     for widgetId in widgetIds {
@@ -567,7 +668,6 @@ enum WidgetError: Error, LocalizedError {
 
 private extension VoltraModule {
   var pushNotificationsEnabled: Bool {
-    // Support both keys for compatibility with older plugin and new Voltra naming
     let main = Bundle.main
     return main.object(forInfoDictionaryKey: "Voltra_EnablePushNotifications") as? Bool ?? false
   }
@@ -575,13 +675,11 @@ private extension VoltraModule {
   func observePushToStartToken() {
     guard #available(iOS 17.2, *), ActivityAuthorizationInfo().areActivitiesEnabled else { return }
 
-    // Check for initial token if available
     if let initialTokenData = Activity<VoltraAttributes>.pushToStartToken {
       let token = initialTokenData.hexString
       VoltraEventBus.shared.send(.pushToStartTokenReceived(token: token))
     }
 
-    // Observe token updates
     Task {
       for await tokenData in Activity<VoltraAttributes>.pushToStartTokenUpdates {
         let token = tokenData.hexString
@@ -593,12 +691,10 @@ private extension VoltraModule {
   func observeLiveActivityUpdates() {
     guard #available(iOS 16.2, *) else { return }
 
-    // 1. Handle currently existing activities (e.g., after app restart)
     for activity in Activity<VoltraAttributes>.activities {
       monitorActivity(activity)
     }
 
-    // 2. Listen for NEW activities created in the future (e.g., push-to-start)
     Task {
       for await newActivity in Activity<VoltraAttributes>.activityUpdates {
         monitorActivity(newActivity)
@@ -606,15 +702,12 @@ private extension VoltraModule {
     }
   }
 
-  /// Set up observers for an activity's lifecycle (only once per activity)
   private func monitorActivity(_ activity: Activity<VoltraAttributes>) {
     let activityId = activity.id
 
-    // Skip if we're already monitoring this activity
     guard !monitoredActivityIds.contains(activityId) else { return }
     monitoredActivityIds.insert(activityId)
 
-    // Observe lifecycle state changes (active → dismissed → ended)
     Task {
       for await state in activity.activityStateUpdates {
         VoltraEventBus.shared.send(
@@ -626,7 +719,6 @@ private extension VoltraModule {
       }
     }
 
-    // Observe push token updates if enabled
     if pushNotificationsEnabled {
       Task {
         for await pushTokenData in activity.pushTokenUpdates {

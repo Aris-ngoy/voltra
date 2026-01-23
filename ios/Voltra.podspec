@@ -20,12 +20,14 @@ Pod::Spec.new do |s|
   # Swift/Objective-C compatibility
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
+    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++20',
   }
 
-  s.dependency 'ExpoModulesCore'
+  # React Native dependency
+  s.dependency 'React-Core'
 
   s.source_files = [
-    "app/**/*.swift",
+    "app/**/*.{swift,m,h}",
     "ui/**/*.swift",
     "shared/**/*.swift",
   ]
