@@ -1,6 +1,35 @@
-import { requireNativeModule } from 'expo'
+import { NativeEventEmitter, NativeModules, Platform } from 'react-native'
 
 import type { EventSubscription, PreloadImageOptions, PreloadImagesResult, UpdateWidgetOptions } from './types.js'
+
+// Get the native module - prefer bridge module for reliability
+function getVoltraNativeModule() {
+  // First check if the bridge module is available (works on both architectures)
+  if (NativeModules.VoltraModule) {
+    return NativeModules.VoltraModule
+  }
+
+  // If bridge module not available, try TurboModule as fallback
+  // This handles cases where only TurboModule is registered
+  try {
+    const NativeVoltraModule = require('./NativeVoltraModule').default
+    if (NativeVoltraModule) {
+      return NativeVoltraModule
+    }
+  } catch {
+    // TurboModule not available
+  }
+
+  return null
+}
+
+const VoltraNativeModule = getVoltraNativeModule()
+
+if (!VoltraNativeModule && Platform.OS === 'ios') {
+  console.warn(
+    'VoltraModule native module not found. Make sure you have properly installed the Voltra package and rebuilt your app.'
+  )
+}
 
 /**
  * Options for starting a Live Activity
@@ -143,6 +172,68 @@ export interface VoltraModuleSpec {
   addListener(event: string, listener: (event: any) => void): EventSubscription
 }
 
-const VoltraModule = requireNativeModule<VoltraModuleSpec>('VoltraModule')
+// Create event emitter for native events
+const eventEmitter = VoltraNativeModule ? new NativeEventEmitter(VoltraNativeModule) : null
+
+// Wrapper object that provides a consistent interface
+const VoltraModule: VoltraModuleSpec = {
+  startLiveActivity: (jsonString: string, options?: StartVoltraOptions) => {
+    return VoltraNativeModule?.startLiveActivity(jsonString, options) ?? Promise.reject(new Error('Module not available'))
+  },
+  updateLiveActivity: (activityId: string, jsonString: string, options?: UpdateVoltraOptions) => {
+    return VoltraNativeModule?.updateLiveActivity(activityId, jsonString, options) ?? Promise.reject(new Error('Module not available'))
+  },
+  endLiveActivity: (activityId: string, options?: EndVoltraOptions) => {
+    return VoltraNativeModule?.endLiveActivity(activityId, options) ?? Promise.reject(new Error('Module not available'))
+  },
+  endAllLiveActivities: () => {
+    return VoltraNativeModule?.endAllLiveActivities() ?? Promise.reject(new Error('Module not available'))
+  },
+  getLatestVoltraActivityId: () => {
+    return VoltraNativeModule?.getLatestVoltraActivityId() ?? Promise.resolve(null)
+  },
+  listVoltraActivityIds: () => {
+    return VoltraNativeModule?.listVoltraActivityIds() ?? Promise.resolve([])
+  },
+  isLiveActivityActive: (activityName: string) => {
+    return VoltraNativeModule?.isLiveActivityActive(activityName) ?? false
+  },
+  isHeadless: () => {
+    return VoltraNativeModule?.isHeadless() ?? false
+  },
+  preloadImages: (images: PreloadImageOptions[]) => {
+    return VoltraNativeModule?.preloadImages(images) ?? Promise.resolve({ succeeded: [], failed: [] })
+  },
+  reloadLiveActivities: (activityNames?: string[] | null) => {
+    return VoltraNativeModule?.reloadLiveActivities(activityNames) ?? Promise.resolve()
+  },
+  clearPreloadedImages: (keys?: string[] | null) => {
+    return VoltraNativeModule?.clearPreloadedImages(keys) ?? Promise.resolve()
+  },
+  updateWidget: (widgetId: string, jsonString: string, options?: UpdateWidgetOptions) => {
+    return VoltraNativeModule?.updateWidget(widgetId, jsonString, options) ?? Promise.reject(new Error('Module not available'))
+  },
+  scheduleWidget: (widgetId: string, timelineJson: string) => {
+    return VoltraNativeModule?.scheduleWidget(widgetId, timelineJson) ?? Promise.reject(new Error('Module not available'))
+  },
+  reloadWidgets: (widgetIds?: string[] | null) => {
+    return VoltraNativeModule?.reloadWidgets(widgetIds) ?? Promise.resolve()
+  },
+  clearWidget: (widgetId: string) => {
+    return VoltraNativeModule?.clearWidget(widgetId) ?? Promise.resolve()
+  },
+  clearAllWidgets: () => {
+    return VoltraNativeModule?.clearAllWidgets() ?? Promise.resolve()
+  },
+  addListener: (event: string, listener: (event: any) => void): EventSubscription => {
+    if (!eventEmitter) {
+      return { remove: () => {} }
+    }
+    const subscription = eventEmitter.addListener(event, listener)
+    return {
+      remove: () => subscription.remove(),
+    }
+  },
+}
 
 export default VoltraModule

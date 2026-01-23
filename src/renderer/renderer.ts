@@ -243,7 +243,8 @@ function renderNodeInternal(element: ReactNode, context: VoltraRenderingContext)
       const id = typeof parameters.id === 'string' ? parameters.id : undefined
 
       // Remove id from parameters so it doesn't end up in props
-      const { id: _id, ...cleanParameters } = parameters
+      const { id: _omitId, ...cleanParameters } = parameters
+      void _omitId
 
       if (isTextComponent) {
         // Text component must resolve to a string
@@ -400,6 +401,7 @@ export function transformProps(
   context: VoltraRenderingContext,
   componentName?: string
 ): Record<string, VoltraPropValue> {
+  void componentName
   const transformed: Record<string, VoltraPropValue> = {}
 
   for (const [key, value] of Object.entries(props)) {

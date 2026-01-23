@@ -1,4 +1,4 @@
-import { IOSConfig } from 'expo/config-plugins'
+import { IOSConfig } from '@expo/config-plugins'
 
 import { IOS } from './constants'
 import { withIOS } from './features/ios'

@@ -7,10 +7,11 @@
  * I would love to reuse the existing expo-font infrastructure, but it's not that easy to do. I'll most likely revisit it later.
  */
 
-import { type ConfigPlugin, type InfoPlist, IOSConfig, withXcodeProject } from '@expo/config-plugins'
+import { type ConfigPlugin, type ExportedConfig, type InfoPlist, IOSConfig, withXcodeProject } from '@expo/config-plugins'
 import plist from '@expo/plist'
-import type { ExpoConfig } from 'expo/config'
 import { readFileSync, writeFileSync } from 'fs'
+
+type ExpoConfig = ExportedConfig
 import * as fs from 'fs/promises'
 import * as path from 'path'
 
