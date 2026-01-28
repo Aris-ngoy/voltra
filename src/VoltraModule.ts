@@ -2,13 +2,28 @@ import { NativeEventEmitter, NativeModules, Platform } from 'react-native'
 
 import type { EventSubscription, PreloadImageOptions, PreloadImagesResult, UpdateWidgetOptions } from './types.js'
 
-// Check if TurboModules are enabled
-const isTurboModuleEnabled = (global as any).__turboModuleProxy != null
+// Get the native module - prefer bridge module for reliability
+function getVoltraNativeModule() {
+  // First check if the bridge module is available (works on both architectures)
+  if (NativeModules.VoltraModule) {
+    return NativeModules.VoltraModule
+  }
 
-// Get the native module - either TurboModule or Bridge
-const VoltraNativeModule = isTurboModuleEnabled
-  ? require('./NativeVoltraModule').default
-  : NativeModules.VoltraModule
+  // If bridge module not available, try TurboModule as fallback
+  // This handles cases where only TurboModule is registered
+  try {
+    const NativeVoltraModule = require('./NativeVoltraModule').default
+    if (NativeVoltraModule) {
+      return NativeVoltraModule
+    }
+  } catch {
+    // TurboModule not available
+  }
+
+  return null
+}
+
+const VoltraNativeModule = getVoltraNativeModule()
 
 if (!VoltraNativeModule && Platform.OS === 'ios') {
   console.warn(

@@ -8,7 +8,7 @@ import VoltraModule from './VoltraModule.js'
  */
 export function isGlassSupported(): boolean {
   if (Platform.OS !== 'ios') return false
-  const v: any = Platform.Version
+  const v = Platform.Version as number | string
   let major = 0
   if (typeof v === 'string') {
     const m = parseInt(v.split('.')[0] || '0', 10)

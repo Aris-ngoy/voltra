@@ -53,6 +53,62 @@ Then run `npx expo prebuild --clean` to generate the iOS extension target.
 
 See the [documentation](https://use-voltra.dev/docs/getting-started/quick-start) for detailed setup instructions.
 
+## Bare React Native (iOS) setup
+
+1) Install Voltra in your app:
+
+```sh
+npm install voltra
+```
+
+2) Point Metro at a single copy of React/React Native (prevents the "Invalid hook call" error in monorepos or file-linked packages). Add this to your `metro.config.js`:
+
+```js
+const path = require('path')
+const exclusionList = require('metro-config/src/defaults/exclusionList')
+const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config')
+
+const projectRoot = __dirname
+const workspaceRoot = path.resolve(projectRoot, '..') // adjust to your monorepo root
+const escapeForRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const config = {
+  watchFolders: [workspaceRoot],
+  resolver: {
+    blockList: exclusionList([
+      new RegExp(`${escapeForRegex(path.resolve(workspaceRoot, 'node_modules/react'))}/.*`),
+      new RegExp(`${escapeForRegex(path.resolve(workspaceRoot, 'node_modules/react-native'))}/.*`),
+    ]),
+    nodeModulesPaths: [
+      path.resolve(projectRoot, 'node_modules'),
+      path.resolve(workspaceRoot, 'node_modules'),
+    ],
+    extraNodeModules: {
+      react: path.resolve(projectRoot, 'node_modules/react'),
+      'react-native': path.resolve(projectRoot, 'node_modules/react-native'),
+      voltra: path.resolve(workspaceRoot, 'node_modules/voltra/build'),
+      'voltra/client': path.resolve(workspaceRoot, 'node_modules/voltra/build/client'),
+    },
+  },
+}
+
+module.exports = mergeConfig(getDefaultConfig(__dirname), config)
+```
+
+3) Create the iOS Live Activity/Widget extension. A turnkey script lives in [apps/rnExample/scripts/setup-widget-extension.sh](apps/rnExample/scripts/setup-widget-extension.sh); copy it into your project (e.g., `scripts/`) and run:
+
+```sh
+chmod +x scripts/setup-widget-extension.sh
+./scripts/setup-widget-extension.sh \
+  --target-name MyAppLiveActivity \
+  --bundle-id MyAppLiveActivity \
+  --group-id group.com.mycompany.myapp   # optional, for shared data
+```
+
+Then add the target to your Xcode project (the script prints the exact steps) or run the helper Ruby script if you copied [apps/rnExample/scripts/add-widget-target.rb](apps/rnExample/scripts/add-widget-target.rb) (`gem install xcodeproj` required). Finally run `cd ios && pod install`, open the workspace, and configure signing for the new extension.
+
+4) Build for iOS (Live Activities are iOS-only) and use the `useLiveActivity` hook as shown below.
+
 ## Quick example
 
 ```tsx

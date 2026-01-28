@@ -121,4 +121,4 @@ export interface Spec extends TurboModule {
   removeListeners(count: number): void
 }
 
-export default TurboModuleRegistry.getEnforcing<Spec>('VoltraModule')
+export default TurboModuleRegistry.get<Spec>('VoltraModule')

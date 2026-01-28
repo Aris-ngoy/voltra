@@ -23,11 +23,14 @@ Pod::Spec.new do |s|
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++20',
   }
 
-  # React Native dependency
+  # React Native dependencies
   s.dependency 'React-Core'
 
+  # Install the generated codegen spec
+  install_modules_dependencies(s)
+
   s.source_files = [
-    "app/**/*.{swift,m,h}",
+    "app/**/*.{swift,m,h,mm}",
     "ui/**/*.swift",
     "shared/**/*.swift",
   ]

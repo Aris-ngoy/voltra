@@ -66,7 +66,7 @@ describe('Hooks', () => {
 
   test('5. useReducer basic', () => {
     // Call useReducer(reducer, { count: 0 }). Verify returns [{ count: 0 }, dispatch] where dispatch is a function.
-    const reducer = (state, action) => state
+    const reducer = (state, _action) => state
     const initial = { count: 0 }
     let stateVal, dispatch
     const Component = () => {
@@ -80,7 +80,7 @@ describe('Hooks', () => {
 
   test('6. useReducer with init', () => {
     // Call useReducer(reducer, 5, (n) => ({ count: n * 2 })). Verify returns [{ count: 10 }, dispatch].
-    const reducer = (state, action) => state
+    const reducer = (state, _action) => state
     const initFn = (n) => ({ count: n * 2 })
     let stateVal
     const Component = () => {

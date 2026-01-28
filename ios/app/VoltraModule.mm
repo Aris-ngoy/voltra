@@ -1,6 +1,11 @@
 #import <React/RCTBridgeModule.h>
 #import <React/RCTEventEmitter.h>
 
+#ifdef RCT_NEW_ARCH_ENABLED
+#import <VoltraSpec/VoltraSpec.h>
+#import <ReactCommon/RCTTurboModule.h>
+#endif
+
 @interface RCT_EXTERN_MODULE(VoltraModule, RCTEventEmitter)
 
 // Live Activity Methods
@@ -70,3 +75,17 @@ RCT_EXTERN_METHOD(clearAllWidgets:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 
 @end
+
+#ifdef RCT_NEW_ARCH_ENABLED
+// TurboModule implementation
+@interface VoltraModule () <NativeVoltraModuleSpec>
+@end
+
+@implementation VoltraModule (TurboModule)
+
+- (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params {
+  return std::make_shared<facebook::react::NativeVoltraModuleSpecJSI>(params);
+}
+
+@end
+#endif
