@@ -71,6 +71,14 @@
   },
   "license": "MIT",
   "homepage": "https://use-voltra.dev",
+  "codegenConfig": {
+    "name": "VoltraModule",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "voltra"
+    }
+  },
   "dependencies": {
     "dedent": "^1.7.1",
     "react-is": "^19.2.0",

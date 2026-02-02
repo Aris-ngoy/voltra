@@ -34,7 +34,8 @@
     "react-native": "0.79.6",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
-    "react-reconciler": "^0.31.0"
+    "react-reconciler": "^0.31.0",
+    "voltra": "file:.."
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

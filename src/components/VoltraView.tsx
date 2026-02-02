@@ -1,11 +1,11 @@
-import { requireNativeView } from 'expo'
 import React, { ReactNode, useEffect, useMemo } from 'react'
-import { StyleProp, ViewStyle } from 'react-native'
+import { Platform, StyleProp, ViewStyle, requireNativeComponent } from 'react-native'
 
 import { addVoltraListener, VoltraInteractionEvent } from '../events.js'
 import { renderVoltraVariantToJson } from '../renderer/index.js'
 
-const NativeVoltraView = requireNativeView('VoltraModule')
+const NativeVoltraView =
+  Platform.OS === 'android' ? requireNativeComponent('VoltraView') : require('expo').requireNativeView('VoltraModule')
 
 // Generate a unique ID for views that don't have one
 const generateViewId = () => `voltra-view-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`

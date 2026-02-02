@@ -1,4 +1,6 @@
-import { requireNativeModule } from 'expo'
+import { NativeEventEmitter, NativeModules, Platform } from 'react-native'
+
+import NativeVoltraModule from './NativeVoltraModule.js'
 
 import type { EventSubscription, PreloadImageOptions, PreloadImagesResult, UpdateWidgetOptions } from './types.js'
 
@@ -204,6 +206,63 @@ export interface VoltraModuleSpec {
   addListener(event: string, listener: (event: any) => void): EventSubscription
 }
 
-const VoltraModule = requireNativeModule<VoltraModuleSpec>('VoltraModule')
+const turboModule = NativeVoltraModule
+const legacyModule = (NativeModules as { VoltraModule?: VoltraModuleSpec }).VoltraModule ?? null
+
+const nativeModule = (turboModule ?? legacyModule) as VoltraModuleSpec | null
+
+const isTurboModuleEnabled = Boolean((global as any)?.__turboModuleProxy)
+const unavailableError = new Error(
+  `[Voltra] Native module 'VoltraModule' is not available on ${Platform.OS}. Ensure the native module is properly installed and the app was rebuilt.` +
+    (Platform.OS === 'android' && !isTurboModuleEnabled
+      ? ' TurboModules require the New Architecture to be enabled on Android.'
+      : '') +
+    ' If using Expo, install and run a custom dev client (Expo Go is not supported).'
+)
+
+let hasWarnedUnavailable = false
+const warnUnavailable = (): void => {
+  if (hasWarnedUnavailable) return
+  hasWarnedUnavailable = true
+  console.warn(unavailableError.message)
+}
+
+const unavailableModule = new Proxy(
+  {},
+  {
+    get: () => {
+      return (..._args: any[]) => {
+        warnUnavailable()
+        throw unavailableError
+      }
+    },
+  }
+) as VoltraModuleSpec
+
+const eventEmitter = nativeModule ? new NativeEventEmitter(nativeModule as any) : null
+
+const createModuleWrapper = (module: VoltraModuleSpec): VoltraModuleSpec => {
+  const nativeAddListener = (module as any).addListener
+  if (typeof nativeAddListener === 'function' && nativeAddListener.length >= 2) {
+    return module
+  }
+
+  return new Proxy(module as any, {
+    get: (target, prop) => {
+      if (prop === 'addListener') {
+        return (event: string, listener: (event: any) => void): EventSubscription => {
+          const subscription = eventEmitter?.addListener(event, listener)
+          return {
+            remove: () => subscription?.remove(),
+          }
+        }
+      }
+
+      return (target as any)[prop]
+    },
+  }) as VoltraModuleSpec
+}
+
+const VoltraModule: VoltraModuleSpec = nativeModule ? createModuleWrapper(nativeModule) : unavailableModule
 
 export default VoltraModule
