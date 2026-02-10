@@ -1,11 +1,15 @@
 import React, { ReactNode, useEffect, useMemo } from 'react'
-import { Platform, StyleProp, ViewStyle, requireNativeComponent } from 'react-native'
+import { StyleProp, ViewStyle, requireNativeComponent } from 'react-native'
 
 import { addVoltraListener, VoltraInteractionEvent } from '../events.js'
 import { renderVoltraVariantToJson } from '../renderer/index.js'
 
-const NativeVoltraView =
-  Platform.OS === 'android' ? requireNativeComponent('VoltraView') : require('expo').requireNativeView('VoltraModule')
+// Use requireNativeComponent for both platforms (TurboModules compatible)
+const NativeVoltraView = requireNativeComponent<{
+  payload: string
+  viewId: string
+  style?: StyleProp<ViewStyle>
+}>('VoltraView')
 
 // Generate a unique ID for views that don't have one
 const generateViewId = () => `voltra-view-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`

@@ -29,12 +29,11 @@
       "types": "./build/android/client.d.ts",
       "default": "./build/android/client.js"
     },
-    "./app.plugin.js": "./app.plugin.js",
-    "./expo-module.config.json": "./expo-module.config.json"
+    "./app.plugin.js": "./app.plugin.js"
   },
   "scripts": {
-    "build": "expo-module build",
-    "clean": "expo-module clean",
+    "build": "tsc --build",
+    "clean": "rm -rf build",
     "clean:plugin": "rm -rf plugin/build plugin/tsconfig.tsbuildinfo",
     "format:check": "prettier --check .",
     "format:fix": "prettier --write .",
@@ -42,13 +41,12 @@
     "format:kotlin:fix": "ktlint -F \"android/**/*.kt\"",
     "format:swift:check": "swiftformat --lint ios",
     "format:swift:fix": "swiftformat ios",
-    "lint": "expo-module eslint",
-    "lint:libOnly": "expo-module eslint ./src",
-    "test": "expo-module test",
-    "prepare": "expo-module prepare && rm .eslintrc.js",
+    "lint": "eslint ./src",
+    "lint:libOnly": "eslint ./src",
+    "test": "jest",
+    "prepare": "npm run build",
     "postprepare": "echo '{\"type\": \"module\"}' > build/package.json",
-    "prepublishOnly": "expo-module prepublishOnly",
-    "expo-module": "expo-module",
+    "prepublishOnly": "npm run build",
     "open:ios": "xed example/ios",
     "generate": "ts-node generator/generate-types.ts",
     "harness:ios": "npm run harness:ios --prefix example",
@@ -56,10 +54,10 @@
   },
   "keywords": [
     "react-native",
-    "expo",
     "live-activity",
     "ios",
-    "apple"
+    "apple",
+    "turbomodules"
   ],
   "author": "Saúl Sharma (https://x.com/saul_sharma), Szymon Chmal (https://x.com/chmalszymon)",
   "repository": {
@@ -72,9 +70,16 @@
   "license": "MIT",
   "homepage": "https://use-voltra.dev",
   "codegenConfig": {
-    "name": "VoltraModule",
+    "name": "VoltraSpec",
     "type": "modules",
     "jsSrcsDir": "src",
+    "ios": {
+      "modulesConformingToProtocol": {
+        "RCTEventEmitter": [
+          "VoltraModule"
+        ]
+      }
+    },
     "android": {
       "javaPackageName": "voltra"
     }
@@ -91,19 +96,17 @@
     "@types/react-is": "^19.2.0",
     "ajv": "^8.12.0",
     "eslint": "^9.33.0",
-    "eslint-config-expo": "^9.2.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-import-resolver-alias": "^1.1.2",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-simple-import-sort": "^12.1.1",
-    "expo": "~53.0.0",
-    "expo-module-scripts": "^4.1.10",
+    "jest": "^29.7.0",
     "prettier": "2.8.8",
     "react-native": "0.79.1",
-    "ts-node": "^10.9.0"
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
   },
   "peerDependencies": {
-    "expo": "*",
     "react": "*",
     "react-native": "*"
   }
