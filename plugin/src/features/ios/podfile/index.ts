@@ -18,10 +18,8 @@ target '${targetName}' do
   use_frameworks! :linkage => podfile_properties['ios.useFrameworks'].to_sym if podfile_properties['ios.useFrameworks']
   use_frameworks! :linkage => ENV['USE_FRAMEWORKS'].to_sym if ENV['USE_FRAMEWORKS']
 
-  require 'json'
-  project_root = "#{Pod::Config.instance.installation_root}/.."
-  voltra_module = JSON.parse(${backtick}npx expo-modules-autolinking search -p apple --json --project-root #{project_root}${backtick})
-  podspec_dir_path = Pathname.new(File.join(voltra_module['${libraryName}']['path'], 'ios')).relative_path_from(Pathname.new(__dir__)).to_path
+  voltra_package_path = File.dirname(${backtick}node --print "require.resolve('${libraryName}/package.json')"${backtick}.strip)
+  podspec_dir_path = Pathname.new(File.join(voltra_package_path, 'ios')).relative_path_from(Pathname.new(__dir__)).to_path
   
   pod 'VoltraWidget', :path => podspec_dir_path
 end`
