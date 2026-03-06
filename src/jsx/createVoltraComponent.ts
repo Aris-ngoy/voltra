@@ -23,10 +23,11 @@ export const createVoltraComponent = <TProps extends Record<string, unknown>>(
     return createElement(componentName, normalizedProps)
   }
 
-  Component[VOLTRA_COMPONENT_TAG] = true
-  Component.displayName = componentName
+  const taggedComponent = Component as unknown as VoltraComponent<TProps>
+  taggedComponent[VOLTRA_COMPONENT_TAG] = true
+  taggedComponent.displayName = componentName
 
-  return Component as VoltraComponent<TProps>
+  return taggedComponent
 }
 
 export const isVoltraComponent = <TProps extends Record<string, unknown>>(

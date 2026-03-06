@@ -1,5 +1,5 @@
 import React, { ReactNode, useEffect, useMemo } from 'react'
-import { StyleProp, ViewStyle, requireNativeComponent } from 'react-native'
+import { requireNativeComponent,StyleProp, ViewStyle } from 'react-native'
 
 import { addVoltraListener, VoltraInteractionEvent } from '../events.js'
 import { renderVoltraVariantToJson } from '../renderer/index.js'

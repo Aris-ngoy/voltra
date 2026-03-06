@@ -194,7 +194,11 @@ function renderNodeInternal(element: ReactNode, context: VoltraRenderingContext)
   if (isForwardRef(element)) {
     const forwardRefElement = element as ReactElement<unknown, ForwardRefExoticComponent<ComponentType<unknown>>>
     const { render } = forwardRefElement.type as unknown as { render: (props: unknown) => ReactNode }
-    return renderFunctionalComponent(render, forwardRefElement.props, context)
+    return renderFunctionalComponent(
+      render as unknown as FunctionComponent<unknown>,
+      forwardRefElement.props,
+      context
+    )
   }
 
   if (isLazy(element)) {

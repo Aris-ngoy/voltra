@@ -1,17 +1,26 @@
 /* eslint-env node */
 const path = require('path')
 const { defineConfig } = require('eslint/config')
+const tsParser = require('@typescript-eslint/parser')
 
 const repoRoot = process.cwd()
-const expoConfig = require('eslint-config-expo/flat')
 const prettierConfig = require('eslint-config-prettier')
 const simpleImportSort = require('eslint-plugin-simple-import-sort')
 
 module.exports = defineConfig([
-  expoConfig,
   prettierConfig,
   {
     ignores: ['build/*', 'plugin/build/*', 'website/doc_build/*'],
+  },
+  {
+    files: ['**/*.{ts,tsx,js,jsx,mjs,cjs}'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
   },
   defineConfig([
     {

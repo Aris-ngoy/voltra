@@ -1,7 +1,6 @@
 import { NativeEventEmitter, NativeModules, Platform } from 'react-native'
 
 import NativeVoltraModule from './NativeVoltraModule.js'
-
 import type { EventSubscription, PreloadImageOptions, PreloadImagesResult, UpdateWidgetOptions } from './types.js'
 
 /**
