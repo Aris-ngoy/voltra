@@ -54,10 +54,7 @@ public class VoltraModule: RCTEventEmitter {
         VoltraEventBus.shared.subscribe { [weak self] eventType, eventData in
             self?.sendEvent(withName: eventType, body: eventData)
         }
-
-        if pushNotificationsEnabled {
-            observePushToStartToken()
-        }
+        observePushToStartToken()
 
         observeLiveActivityUpdates()
     }
