@@ -54,7 +54,10 @@ public class VoltraModule: RCTEventEmitter {
         VoltraEventBus.shared.subscribe { [weak self] eventType, eventData in
             self?.sendEvent(withName: eventType, body: eventData)
         }
-        observePushToStartToken()
+
+        if pushNotificationsEnabled {
+            observePushToStartToken()
+        }
 
         observeLiveActivityUpdates()
     }
@@ -704,8 +707,8 @@ enum WidgetError: Error, LocalizedError {
 
 extension VoltraModule {
     fileprivate var pushNotificationsEnabled: Bool {
-        let main = Bundle.main
-        return main.object(forInfoDictionaryKey: "Voltra_EnablePushNotifications") as? Bool ?? false
+        return Bundle.main.object(forInfoDictionaryKey: "Voltra_EnablePushNotifications") as? Bool
+            ?? false
     }
 
     fileprivate func observePushToStartToken() {

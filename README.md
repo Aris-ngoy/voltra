@@ -86,6 +86,28 @@ Then open your `.xcworkspace` in Xcode and configure signing for the widget exte
 | `--enable-push` | Enable push notifications support (optional) |
 | `--widgets` | Comma-separated list of widget IDs for home screen widgets (optional) |
 
+#### Info.plist configuration (manual setup)
+
+If you configure iOS targets manually (without Expo prebuild/plugin), add the following keys to your main app `Info.plist`:
+
+```xml
+<key>NSSupportsLiveActivities</key>
+<true/>
+<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+<false/>
+<key>Voltra_AppGroupIdentifier</key>
+<string>group.com.yourcompany.yourapp</string>
+```
+
+To enable ActivityKit push token streams (`activityTokenReceived` / `activityPushToStartTokenReceived`), also add:
+
+```xml
+<key>Voltra_EnablePushNotifications</key>
+<true/>
+```
+
+If you use `./scripts/setup-widget-extension.sh --enable-push`, this key is added automatically.
+
 #### Android Widgets
 
 Android widgets require a receiver + provider entry in `AndroidManifest.xml` and a few resource files. You can generate them with the helper script:
